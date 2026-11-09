@@ -28,6 +28,17 @@
 1. [Godot 4.7](https://godotengine.org/download/) を起動して「インポート」からこのフォルダの `project.godot` を開く
 2. 右上の ▶(F5)を押すと始まる
 
+### exe(Windows アプリ)を作る
+
+Godot の書き出し用テンプレート(4.7.2)を入れてから、次を実行すると `export/FreedomLand.exe` ができます。
+exe ファイル1つでゲームが全部入っているので、友達にもこのファイルを渡せば一緒に遊べます。
+
+```bash
+godot --headless --path . --export-release "Windows Desktop" export/FreedomLand.exe
+```
+
+Godot エディタからなら「プロジェクト → エクスポート → Windows Desktop → プロジェクトのエクスポート」でも作れます。
+
 ### オンラインで遊ぶ
 
 - **部屋を作る人(ホスト):** タイトル画面で「部屋を作る」を押します。広場の左上に出る **IPアドレス** をみんなに教えます。
