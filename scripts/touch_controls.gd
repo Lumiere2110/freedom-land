@@ -49,6 +49,15 @@ func _dash_center() -> Vector2:
 func _pause_rect() -> Rect2:
 	return Rect2(size.x / 2.0 - 190, 16, 64, 64)
 
+func _attack_center() -> Vector2:
+	return Vector2(size.x - 150, size.y - 300)
+
+
+## 今のゲームに「こうげき」ボタンがいるか(レーンバトルなど)
+func _uses_attack() -> bool:
+	var g: Node = main.get_node_or_null("Game")
+	return g != null and g.get("uses_attack") == true
+
 
 func _input(event: InputEvent) -> void:
 	if not _active():
@@ -60,6 +69,8 @@ func _input(event: InputEvent) -> void:
 			if _pause_rect().grow(12).has_point(p):
 				main.pause_menu.toggle()
 				_release_all()
+			elif _uses_attack() and p.distance_to(_attack_center()) < 80:
+				_press_button(event.index, "attack")
 			elif p.distance_to(_jump_center()) < 85:
 				_press_button(event.index, "jump")
 			elif p.distance_to(_dash_center()) < 70:
@@ -161,6 +172,8 @@ func _draw() -> void:
 	# ジャンプ・ダッシュ
 	_draw_round_button(_jump_center(), 72, "ジャンプ", Color("#06d6a0"), _button_fingers.values().has("jump"))
 	_draw_round_button(_dash_center(), 56, "ダッシュ", Color("#ff9f43"), _button_fingers.values().has("dash"))
+	if _uses_attack():
+		_draw_round_button(_attack_center(), 68, "こうげき", Color("#ff5d73"), _button_fingers.values().has("attack"))
 
 	# ポーズ
 	var r := _pause_rect()

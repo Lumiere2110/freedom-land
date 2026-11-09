@@ -23,6 +23,7 @@ const SCENES := {
 	"bump_ring": preload("res://scripts/games/bump_ring.gd"),
 	"panel_drop": preload("res://scripts/games/panel_drop.gd"),
 	"spin_bar": preload("res://scripts/games/spin_bar.gd"),
+	"lane_battle": preload("res://scripts/games/lane_battle.gd"),
 }
 
 ## 広場のポータルに出すゲームの説明。bots = 人数が足りないときCPUを入れるか
@@ -35,6 +36,9 @@ const GAMES := [
 		"text": "乗ったパネルは落ちていく。\n最後まで残った人の勝ち!"},
 	{"id": "spin_bar", "title": "ぐるぐるバー", "mode": "対戦", "color": Color("#b388ff"), "bots": true,
 		"text": "回ってくるバーをジャンプでとびこえよう。\n当たると飛ばされる!"},
+	# players = この人数になるまでCPUを足す(書いていなければ4人)
+	{"id": "lane_battle", "title": "Bond", "mode": "チーム 5対5", "color": Color("#06d6a0"), "bots": true, "players": 10,
+		"text": "上・中央・下の3つのレーンで戦うチーム戦。\n敵をたおして得点を入れよう!"},
 ]
 
 ## CPUを入れて、最低この人数にする
@@ -73,6 +77,8 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.has("--autotest"):
 		_autotest()
+	elif args.has("--lanetest"):
+		_autotest_lane()
 	elif args.has("--autohost"):
 		Net.my_name = "ホスト"
 		_on_host_pressed(Net.DEFAULT_PORT)
@@ -95,6 +101,7 @@ func _setup_input() -> void:
 	_add_action("dash", [KEY_SHIFT, KEY_K], [JOY_BUTTON_X], [])
 	_add_action("cam_left", [KEY_Q], [JOY_BUTTON_LEFT_SHOULDER], [])
 	_add_action("cam_right", [KEY_E], [JOY_BUTTON_RIGHT_SHOULDER], [])
+	_add_action("attack", [KEY_J, KEY_F], [JOY_BUTTON_B], [])
 	_add_action("pause", [KEY_ESCAPE, KEY_P], [JOY_BUTTON_START], [])
 
 
@@ -181,7 +188,7 @@ func start_game(game_id: String) -> void:
 	if info.get("bots", false):
 		var n := 1
 		var cpu_colors := [Color("#9aa0b5"), Color("#c9a27e"), Color("#8fb996")]
-		while list.size() < MIN_PLAYERS_WITH_BOTS:
+		while list.size() < info.get("players", MIN_PLAYERS_WITH_BOTS):
 			list.append({"key": "cpu%d" % n, "auth": 1, "name": "CPU%d" % n,
 				"color": cpu_colors[(n - 1) % cpu_colors.size()], "bot": true})
 			n += 1
@@ -258,7 +265,7 @@ func _show_title() -> void:
 	box.add_child(_message_label)
 
 	var keys := Label.new()
-	keys.text = "移動 WASD/矢印  ジャンプ Space  ダッシュ Shift  カメラ Q/E  ポーズ Esc/P  (コントローラーも使えます)"
+	keys.text = "移動 WASD/矢印  ジャンプ Space  ダッシュ Shift  こうげき J/F  カメラ Q/E  ポーズ Esc/P  (コントローラーも使えます)"
 	if touch_screen():
 		keys.text = "画面の左側をさわって移動 ・ 右側をなぞってカメラ ・ 右下のボタンでジャンプ/ダッシュ"
 	keys.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -570,7 +577,7 @@ func _autotest() -> void:
 		_autotest_shot("title_" + page)
 	_show_page("top")
 	Net.start_solo()
-	for id in ["hub", "coin_rush", "bump_ring", "panel_drop", "spin_bar"]:
+	for id in ["hub", "coin_rush", "bump_ring", "panel_drop", "spin_bar", "lane_battle"]:
 		if id == "hub":
 			load_scene("hub", hub_participants())
 		else:
@@ -594,18 +601,39 @@ func _autotest_shot(shot_name: String) -> void:
 	print("SHOT ", ProjectSettings.globalize_path(shot))
 
 
+## レーンバトルを早送りで動かして、CPUどうしが戦って得点が入るか確かめる
+func _autotest_lane() -> void:
+	Net.my_name = "テスト"
+	Net.start_solo()
+	start_game("lane_battle")
+	Engine.time_scale = 3.0
+	for s in 16:
+		await get_tree().create_timer(5.0 * 3.0, true, false, true).timeout
+		var g := get_node_or_null("Game")
+		if not g or current_scene != "lane_battle":
+			break
+		var dead := 0
+		for p in g.players.values():
+			if p.out:
+				dead += 1
+		if s < 2:
+			_autotest_shot("lane_%d" % s)
+		print("LANE t=%ds state=%s points=%s dead=%d kills=%s" % [(s + 1) * 15, g.state, g.team_points, dead, g.scores])
+	get_tree().quit()
+
+
 ## 2台(ホストとゲスト)で同時に起動して、通信できるか確かめる
 func _autotest_online(is_host: bool) -> void:
 	var who := "HOST" if is_host else "GUEST"
 	await get_tree().create_timer(4.0).timeout
-	for id in ["coin_rush", "panel_drop", "bump_ring", "spin_bar", "hub"]:
+	for id in ["coin_rush", "panel_drop", "bump_ring", "spin_bar", "lane_battle", "hub"]:
 		if is_host:
 			if id == "hub":
 				back_to_hub()
 			else:
 				start_game(id)
-		await get_tree().create_timer(9.0).timeout
+		await get_tree().create_timer(25.0 if id == "lane_battle" else 9.0).timeout
 		var g := get_node_or_null("Game")
 		var keys: Array = g.players.keys() if g else []
-		print("NETTEST %s: scene=%s players=%s scores=%s net=%s" % [who, current_scene, keys, g.scores if g else {}, Net.players.keys()])
+		print("NETTEST %s: scene=%s players=%s scores=%s team=%s net=%s" % [who, current_scene, keys, g.scores if g else {}, g.get("team_points") if g else null, Net.players.keys()])
 	get_tree().quit()

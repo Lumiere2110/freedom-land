@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1794238460|3039292';
+const CACHE_VERSION = '1794239628|3159869';
 /** @type {string} */
 const CACHE_PREFIX = 'Freedom Land-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
