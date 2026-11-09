@@ -81,13 +81,15 @@ func open() -> void:
 	else:
 		_note.text = "ゲームを止めています"
 		get_tree().paused = true
-		_add_button("はじめからやりなおす", Color("#ffd166"), func():
-			var scene: String = main.current_scene
-			close()
-			main.start_game(scene))
-		_add_button("ゲーム一覧にもどる", Color("#4cc9f0"), func():
-			close()
-			main._back_to_title_page("play"))
+		# 空島(広場)にいるときは、ゲーム用のボタンは出さない
+		if main.current_scene != "hub":
+			_add_button("はじめからやりなおす", Color("#ffd166"), func():
+				var scene: String = main.current_scene
+				close()
+				main.start_game(scene))
+			_add_button("空島にもどる", Color("#4cc9f0"), func():
+				close()
+				main.back_to_hub())
 		_add_button("タイトルにもどる", Color("#c7c9d9"), func():
 			close()
 			main.back_to_title())

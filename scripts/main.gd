@@ -7,8 +7,9 @@ extends Node
 ## やっていること:
 ##   1. キーボード・コントローラーのボタンを登録する
 ##   2. タイトル画面を出す
-##        「プレイ」   → ゲーム一覧 → 選んだゲームをひとり(+CPU)で遊ぶ
-##        「オンライン」→ 部屋を作る / 部屋に入る → みんなで広場に集まって遊ぶ
+##        「プレイ」   → 空島(広場)へ。ポータルに入るとゲームが始まる(ひとり+CPU)
+##        「オンライン」→ ルームを作成(パスワードが出る) / ルームに参加(パスワードを入れる)
+##                       → みんなで同じ空島に集まって遊ぶ
 ##   3. 「広場」や「ミニゲーム」を切りかえる
 ##
 ## 画面の切りかえは「Game」という名前のノードを入れかえて行います。
@@ -48,7 +49,8 @@ var current_scene := ""        # 今の画面の名前
 var current_participants := [] # 今の画面の参加者
 var _title_ui: Control
 var _message_label: Label
-var _pages := {}               # タイトル画面のページ: "top"(はじめ) / "play"(ゲーム一覧) / "online"(接続)
+var _pages := {}               # タイトル画面のページ: "top"(はじめ) / "online"(ルーム) / "join"(パスワード入力)
+var _code_edit: LineEdit       # パスワードを入れる欄
 var _name_edit: LineEdit
 var pause_menu: CanvasLayer    # ポーズメニュー(scripts/pause_menu.gd)
 var touch: Control             # スマホ用の画面ボタン(scripts/touch_controls.gd)
@@ -59,6 +61,7 @@ func _ready() -> void:
 	_setup_input()
 	Net.connection_problem.connect(_on_connection_problem)
 	Net.players_changed.connect(_on_players_changed)
+	Net.room_ready.connect(_on_room_ready)
 	_show_title()
 
 	# ポーズメニュー
@@ -81,11 +84,10 @@ func _ready() -> void:
 		_autotest_lane()
 	elif args.has("--autohost"):
 		Net.my_name = "ホスト"
-		_on_host_pressed(Net.DEFAULT_PORT)
+		_on_host_pressed()
 		_autotest_online(true)
 	elif args.has("--autojoin"):
 		Net.my_name = "ゲスト"
-		Net.join_room("127.0.0.1", Net.DEFAULT_PORT)
 		_autotest_online(false)
 
 
@@ -154,13 +156,8 @@ func send_current_scene_to(peer_id: int) -> void:
 	load_scene.rpc_id(peer_id, current_scene, current_participants)
 
 
-## ゲームが終わったあとに戻る場所
-##   オンライン → みんなで広場へ(ホストだけが決める)
-##   ひとりで遊んでいる → タイトルのゲーム一覧へ
+## ゲームが終わったあとは、空島(広場)へ戻る(ホストだけが決める。ひとりのときは自分がホスト)
 func back_to_hub() -> void:
-	if not Net.online:
-		_back_to_title_page("play")
-		return
 	if multiplayer.is_server():
 		load_scene.rpc("hub", hub_participants())
 
@@ -252,8 +249,8 @@ func _show_title() -> void:
 
 	# ページを3つ作って、同じ場所に重ねておく(見せるのは1つだけ)
 	_pages["top"] = _build_top_page()
-	_pages["play"] = _build_play_page()
 	_pages["online"] = _build_online_page()
+	_pages["join"] = _build_join_page()
 	for page in _pages.values():
 		box.add_child(page)
 
@@ -319,83 +316,15 @@ func _build_top_page() -> Control:
 	var play := _big_button("プレイ", Color("#06d6a0"))
 	play.custom_minimum_size.y = 68
 	play.add_theme_font_size_override("font_size", 32)
-	play.pressed.connect(func(): _show_page("play"))
+	play.pressed.connect(_start_solo)
 	page.add_child(play)
 
 	var online := _big_button("オンライン", Color("#4cc9f0"))
 	online.custom_minimum_size.y = 68
 	online.add_theme_font_size_override("font_size", 32)
-	online.pressed.connect(func():
-		if Net.is_web():
-			# ブラウザ版では、パソコンどうしをつなぐ通信(ENet)が使えない
-			_set_message("ブラウザ版ではオンライン対戦はできません。\nみんなで遊ぶときはパソコン版(my web からダウンロード)を使ってね。")
-		else:
-			_show_page("online"))
+	online.pressed.connect(func(): _show_page("online"))
 	page.add_child(online)
 	return page
-
-
-## ゲーム一覧のページ: ゲームを選ぶと、ひとり(+CPU)ですぐ始まる
-func _build_play_page() -> Control:
-	var page := VBoxContainer.new()
-	page.add_theme_constant_override("separation", 12)
-
-	var head := Label.new()
-	head.text = "ゲームをえらぼう"
-	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	head.add_theme_font_size_override("font_size", 30)
-	page.add_child(head)
-
-	# ゲームのカードを2列にならべる
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 14)
-	grid.add_theme_constant_override("v_separation", 14)
-	page.add_child(grid)
-	for g in GAMES:
-		grid.add_child(_game_card(g))
-
-	# CPUのつよさを選ぶ列
-	var level_row := cpu_level_row()
-	level_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	page.add_child(level_row)
-
-	var back := _big_button("もどる", Color("#c7c9d9"))
-	back.custom_minimum_size = Vector2(220, 48)
-	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	back.pressed.connect(func(): _show_page("top"))
-	page.add_child(back)
-	return page
-
-
-## ゲーム1つぶんのカード(押すとそのゲームが始まる大きなボタン)
-func _game_card(g: Dictionary) -> Button:
-	var color: Color = g["color"]
-	var b := _big_button("", color)
-	b.custom_minimum_size = Vector2(360, 120)
-	b.focus_mode = Control.FOCUS_ALL
-	# ボタンの中に文字を2段で並べる(タイトルと説明)
-	var inner := VBoxContainer.new()
-	inner.set_anchors_preset(Control.PRESET_FULL_RECT)
-	inner.offset_left = 18
-	inner.offset_right = -18
-	inner.offset_top = 12
-	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_child(inner)
-	var title := Label.new()
-	title.text = "%s  [%s]" % [g["title"], g["mode"]]
-	title.add_theme_font_size_override("font_size", 26)
-	title.add_theme_color_override("font_color", Color("#1b1f4a"))
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	inner.add_child(title)
-	var text := Label.new()
-	text.text = g["text"]
-	text.add_theme_font_size_override("font_size", 16)
-	text.add_theme_color_override("font_color", Color("#1b1f4a"))
-	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	inner.add_child(text)
-	b.pressed.connect(func(): _start_solo_game(g["id"]))
-	return b
 
 
 ## 「CPUのつよさ: よわい / ふつう / つよい」の列を作る(タイトルと広場で使う)
@@ -438,74 +367,119 @@ func touch_screen() -> bool:
 	return DisplayServer.is_touchscreen_available() or OS.get_cmdline_user_args().has("--touch")
 
 
-## ひとりでゲームを始める(足りない人数はCPU)
-func _start_solo_game(game_id: String) -> void:
+## 「プレイ」: ひとり(+CPU)で空島へ。空島のポータルに入るとゲームが始まる
+func _start_solo() -> void:
 	Net.my_name = _name_from(_name_edit)
 	Net.start_solo()
-	start_game(game_id)
+	load_scene("hub", hub_participants())
 
 
-## オンラインのページ: 部屋を作る / IPアドレスを入れて部屋に入る
+## オンラインのページ: ルームを作成 / ルームに参加
 func _build_online_page() -> Control:
+	var page := _page_box("オンラインで遊ぶ",
+		"1人が「ルームを作成」を押すと、画面にパスワードが出ます。\nほかの人は「ルームに参加」でそのパスワードを入れると、同じ空島に集まれます。")
+
+	var host := _big_button("ルームを作成", Color("#ffd166"))
+	host.custom_minimum_size.y = 64
+	host.add_theme_font_size_override("font_size", 28)
+	host.pressed.connect(func():
+		Net.my_name = _name_from(_name_edit)
+		_on_host_pressed())
+	page.add_child(host)
+
+	var join := _big_button("ルームに参加", Color("#4cc9f0"))
+	join.custom_minimum_size.y = 64
+	join.add_theme_font_size_override("font_size", 28)
+	join.pressed.connect(func():
+		_show_page("join")
+		_code_edit.grab_focus.call_deferred())
+	page.add_child(join)
+
+	page.add_child(_back_button(func():
+		Net.leave()   # ルームを作っている途中ならやめる
+		_show_page("top")))
+	return page
+
+
+## パスワード入力のページ
+func _build_join_page() -> Control:
+	var page := _page_box("ルームに参加", "ルームを作った人の画面に出ているパスワード(6文字)を入れてね")
+
+	_code_edit = LineEdit.new()
+	_code_edit.placeholder_text = "パスワード"
+	_code_edit.max_length = 6
+	_code_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_code_edit.add_theme_font_size_override("font_size", 40)
+	_code_edit.custom_minimum_size.y = 70
+	# 小文字で入れても大文字にする
+	_code_edit.text_changed.connect(func(t: String):
+		var up := t.to_upper()
+		if up != t:
+			var caret := _code_edit.caret_column
+			_code_edit.text = up
+			_code_edit.caret_column = caret)
+	_code_edit.text_submitted.connect(func(_t: String): _join_with_code())
+	page.add_child(_code_edit)
+
+	var enter := _big_button("ルームに入る", Color("#06d6a0"))
+	enter.custom_minimum_size.y = 64
+	enter.add_theme_font_size_override("font_size", 28)
+	enter.pressed.connect(_join_with_code)
+	page.add_child(enter)
+
+	page.add_child(_back_button(func():
+		Net.leave()
+		_show_page("online")))
+	return page
+
+
+## ページの入れ物(見出し+説明)
+func _page_box(title: String, help: String) -> VBoxContainer:
 	var page := VBoxContainer.new()
 	page.add_theme_constant_override("separation", 14)
 	page.custom_minimum_size = Vector2(520, 0)
 	page.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-
 	var head := Label.new()
-	head.text = "オンラインで遊ぶ"
+	head.text = title
 	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	head.add_theme_font_size_override("font_size", 30)
 	page.add_child(head)
-
 	var how := Label.new()
-	how.text = "1人が「部屋を作る」を押して、広場に出るIPアドレスをみんなに教えます。\nほかの人はそのIPアドレスを入れて「部屋に入る」を押します。"
+	how.text = help
 	how.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	how.add_theme_font_size_override("font_size", 16)
 	how.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
 	page.add_child(how)
-
-	var host := _big_button("部屋を作る(ホスト)", Color("#ffd166"))
-	host.pressed.connect(func():
-		Net.my_name = _name_from(_name_edit)
-		_on_host_pressed(Net.DEFAULT_PORT))
-	page.add_child(host)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	var ip_edit := LineEdit.new()
-	ip_edit.placeholder_text = "ホストのIPアドレス(例 192.168.0.5)"
-	ip_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(ip_edit)
-	var join := _big_button("部屋に入る", Color("#4cc9f0"))
-	join.pressed.connect(func():
-		Net.my_name = _name_from(_name_edit)
-		var address := ip_edit.text.strip_edges()
-		if address == "":
-			address = "127.0.0.1"
-		if Net.join_room(address, Net.DEFAULT_PORT) != OK:
-			_set_message("接続を始められませんでした。")
-		else:
-			_set_message("%s に接続しています…" % address))
-	row.add_child(join)
-	page.add_child(row)
-
-	var back := _big_button("もどる", Color("#c7c9d9"))
-	back.custom_minimum_size = Vector2(220, 48)
-	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	back.pressed.connect(func():
-		if Net.online:
-			Net.leave()   # 接続中ならやめる
-		_show_page("top"))
-	page.add_child(back)
 	return page
 
 
-func _on_host_pressed(port: int) -> void:
-	var err := Net.host_room(port)
-	if err != OK:
-		_set_message("部屋を作れませんでした(ポート %d が使用中かもしれません)。" % port)
+func _back_button(action: Callable) -> Button:
+	var back := _big_button("もどる", Color("#c7c9d9"))
+	back.custom_minimum_size = Vector2(220, 48)
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	back.pressed.connect(action)
+	return back
+
+
+## パスワードを入れて「ルームに入る」
+func _join_with_code() -> void:
+	var code := _code_edit.text.strip_edges().to_upper()
+	if code.length() != 6:
+		_set_message("パスワードは6文字です。")
 		return
+	Net.my_name = _name_from(_name_edit)
+	Net.join_room(code)
+	_set_message("ルーム「%s」をさがしています…(少し時間がかかります)" % code)
+
+
+## 「ルームを作成」: パスワードができたら空島へ(_on_room_ready)
+func _on_host_pressed() -> void:
+	Net.host_room()
+	_set_message("ルームを作っています…")
+
+
+func _on_room_ready(_code: String) -> void:
 	load_scene("hub", hub_participants())
 
 
@@ -525,7 +499,10 @@ func _back_to_title_page(page_name: String) -> void:
 
 
 func _on_connection_problem(message: String) -> void:
-	back_to_title(message)
+	# ルームに入ろうとして失敗したときは、パスワード入力のページに戻す
+	var joining: bool = current_scene == "" and _pages["join"].visible
+	_back_to_title_page("join" if joining else "top")
+	_set_message(message)
 
 
 func _set_message(text: String) -> void:
@@ -571,7 +548,7 @@ func _big_button(text: String, color: Color) -> Button:
 func _autotest() -> void:
 	Net.my_name = "テスト"
 	# タイトル画面の3つのページを順番に表示する
-	for page in ["top", "play", "online"]:
+	for page in ["top", "online", "join"]:
 		_show_page(page)
 		await get_tree().create_timer(3.0 if page == "top" else 1.5).timeout
 		_autotest_shot("title_" + page)
@@ -625,6 +602,34 @@ func _autotest_lane() -> void:
 ## 2台(ホストとゲスト)で同時に起動して、通信できるか確かめる
 func _autotest_online(is_host: bool) -> void:
 	var who := "HOST" if is_host else "GUEST"
+	var code_file := "user://autotest_room.txt"
+	if is_host:
+		# パスワードができたらファイルに書いて、ゲストが入ってくるのを待つ
+		await Net.room_ready
+		var f := FileAccess.open(code_file, FileAccess.WRITE)
+		f.store_string(Net.room_code)
+		f.close()
+		print("NETTEST HOST: room=", Net.room_code)
+		for i in 60:
+			if Net.players.size() >= 2:
+				break
+			await get_tree().create_timer(1.0).timeout
+		print("NETTEST HOST: players=", Net.players.keys())
+	else:
+		# ホストが書いたパスワードを読んで、ルームに入る
+		for i in 30:
+			if FileAccess.file_exists(code_file):
+				break
+			await get_tree().create_timer(0.5).timeout
+		var code := FileAccess.get_file_as_string(code_file)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(code_file))
+		print("NETTEST GUEST: joining ", code)
+		Net.join_room(code)
+		for i in 60:
+			if current_scene != "":
+				break
+			await get_tree().create_timer(1.0).timeout
+		print("NETTEST GUEST: scene=", current_scene, " players=", Net.players.keys())
 	await get_tree().create_timer(4.0).timeout
 	for id in ["coin_rush", "panel_drop", "bump_ring", "spin_bar", "lane_battle", "hub"]:
 		if is_host:

@@ -1,0 +1,15 @@
+; Godot の WebRTC 拡張(公式 godotengine/webrtc-native 1.2.2)。パソコン版のオンラインで使います。
+; ブラウザ版はブラウザの WebRTC をそのまま使うので、この拡張は使いません(exclude_tags の web)。
+; Windows 64bit 用のファイルだけ入れています。
+[configuration]
+
+entry_symbol = "webrtc_extension_init"
+compatibility_minimum = 4.3
+
+exclude_tags = ["web", "no-webrtc"]
+
+[libraries]
+
+windows.debug.x86_64 = "lib/libwebrtc_native.windows.template_debug.x86_64.dll"
+
+windows.release.x86_64 = "lib/libwebrtc_native.windows.template_release.x86_64.dll"

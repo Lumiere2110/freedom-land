@@ -20,7 +20,7 @@ var _time := 0.0
 func _ready() -> void:
 	is_hub = true
 	game_title = "Freedom Land 広場"
-	help_text = "ポータルに入るとゲームが始まります(ホストのみ)   ダッシュ Shift / ジャンプ Space / カメラ Q・E"
+	help_text = "ポータルに入るとゲームが始まります(オンラインではホストが入ったとき)   ダッシュ Shift / ジャンプ Space / カメラ Q・E"
 	cam_distance = 14.0
 	cam_height = 10.0
 	_live = participants.size() > 0
@@ -206,14 +206,20 @@ func _build_hub_ui() -> void:
 	hud.add_child(panel)
 	var box := VBoxContainer.new()
 	panel.add_child(box)
-	var text := "ひとりで遊んでいます"
+	var text := "ひとりで遊んでいます\nポータル(光る門)に入ると\nゲームが始まります"
 	if Net.online:
 		if multiplayer.is_server():
-			text = "あなたがホストです\nIPアドレス: %s\nポート: %d" % [Net.local_address(), Net.DEFAULT_PORT]
+			text = "あなたがホストです\nみんなにパスワードを教えてね"
 		else:
-			text = "部屋に参加中"
+			text = "ルームに参加中"
 	_info_label = make_label(text, 20, Color("#ffd166"))
 	box.add_child(_info_label)
+	# ルームのパスワードを大きく表示
+	if Net.online and Net.room_code != "":
+		box.add_child(make_label("パスワード", 16, Color(1, 1, 1, 0.7)))
+		var code_label := make_label(Net.room_code, 48, Color.WHITE)
+		code_label.add_theme_color_override("font_outline_color", Color("#1b1f4a"))
+		box.add_child(code_label)
 	box.add_child(make_label("参加者", 18, Color(1, 1, 1, 0.7)))
 	_player_list = VBoxContainer.new()
 	box.add_child(_player_list)

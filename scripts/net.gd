@@ -7,9 +7,9 @@ extends Node
 ## どのスクリプトからでも「Net.〇〇」と書くだけで使えます。
 ##
 ## しくみのざっくり説明:
-##   ・「ホスト」= 部屋を作る人。ゲームの進行(点数・タイマーなど)を決める係。
-##   ・「クライアント」= ホストの部屋に入る人。
-##   ・パソコン同士は ENet という通信方法でつながります。
+##   ・「ホスト」= ルームを作る人。ゲームの進行(点数・タイマーなど)を決める係。
+##   ・「ゲスト」= パスワードを入れて、ホストのルームに入る人。
+##   ・パソコンやスマホどうしは WebRTC という通信方法でつながります(くわしくは room.gd)。
 ##   ・各プレイヤーには「ピアID」という番号がつきます。ホストはいつも 1 番です。
 ##
 ## RPC(アールピーシー)とは:
@@ -22,10 +22,15 @@ signal players_changed
 ## 接続に失敗したとき・切れたときに知らせる合図
 signal connection_problem(message: String)
 
-## 通信に使う「ポート番号」。部屋に入る人も同じ番号を使います。
-const DEFAULT_PORT := 24680
-## 一つの部屋に入れる最大人数(ホストをのぞく)
+## ルームができたときの合図(パスワードつき)
+signal room_ready(code: String)
+
+## 一つのルームに入れる最大人数(ホストをのぞく)
 const MAX_CLIENTS := 7
+
+const RoomScript = preload("res://scripts/room.gd")
+var room: Node              # ルームとパスワードの係(room.gd)
+var room_code := ""         # 今いるルームのパスワード
 
 ## プレイヤーの色。入った順に割り当てます。
 const COLORS := [
@@ -74,6 +79,12 @@ func _ready() -> void:
 	ThemeDB.fallback_font = font
 	ThemeDB.fallback_font_size = 22
 
+	# ルームの係(scripts/room.gd)
+	room = RoomScript.new()
+	add_child(room)
+	room.room_ready.connect(_on_room_ready)
+	room.failed.connect(_on_room_failed)
+
 	# 通信のできごとが起きたときに呼ばれる関数をつないでおく
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
@@ -92,46 +103,43 @@ func start_solo() -> void:
 	players_changed.emit()
 
 
-## 部屋を作る(ホストになる)。うまくいけば OK が返ります。
-func host_room(port: int) -> Error:
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(port, MAX_CLIENTS)
-	if err != OK:
-		return err
-	multiplayer.multiplayer_peer = peer
+## ルームを作る(ホストになる)。パスワードができると room_ready の合図が来ます。
+func host_room() -> void:
+	leave()
+	multiplayer.multiplayer_peer = room.start_host()
 	online = true
+	room_code = room.code
 	players = {1: {"name": my_name, "color": COLORS[0]}}
-	players_changed.emit()
-	return OK
 
 
-## 部屋に入る(クライアントになる)。つながったかどうかは後でシグナルでわかります。
-func join_room(address: String, port: int) -> Error:
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_client(address, port)
-	if err != OK:
-		return err
-	multiplayer.multiplayer_peer = peer
+## パスワードを入れてルームに入る。つながると connected_to_server が来ます。
+func join_room(code: String) -> void:
+	leave()
+	multiplayer.multiplayer_peer = room.start_guest(code)
 	online = true
+	room_code = room.code
 	players = {}
-	return OK
 
 
 ## 通信をやめてタイトルに戻るときに使う
 func leave() -> void:
+	room.stop()
 	if multiplayer.multiplayer_peer:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	online = false
+	room_code = ""
 	players = {}
 
 
-## このパソコンの IP アドレス(同じ Wi-Fi の人に教える番号)を探す
-func local_address() -> String:
-	for a in IP.get_local_addresses():
-		if a.begins_with("192.168.") or a.begins_with("10.") or a.begins_with("172."):
-			return a
-	return "127.0.0.1"
+func _on_room_ready(code: String) -> void:
+	room_ready.emit(code)
+	players_changed.emit()
+
+
+func _on_room_failed(message: String) -> void:
+	leave()
+	connection_problem.emit(message)
 
 
 # ───────── 通信のできごと ─────────
@@ -175,7 +183,7 @@ func _on_peer_disconnected(id: int) -> void:
 
 func _on_connection_failed() -> void:
 	leave()
-	connection_problem.emit("部屋に入れませんでした。IPアドレスとポート番号を確かめてください。")
+	connection_problem.emit("ルームに入れませんでした。パスワードを確かめてください。")
 
 
 func _on_host_disconnected() -> void:
