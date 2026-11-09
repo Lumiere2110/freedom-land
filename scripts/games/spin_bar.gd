@@ -112,7 +112,7 @@ func game_process(delta: float) -> void:
 		if i == 1 and _bar_active(1) and not _bars[1].visible:
 			_bars[1].visible = true
 			show_big("2本目のバー!", Color("#118ab2"))
-			get_tree().create_timer(1.0).timeout.connect(func():
+			get_tree().create_timer(1.0, false).timeout.connect(func():
 				if is_inside_tree() and big_label.text == "2本目のバー!":
 					show_big(""))
 	if state != "play":
@@ -235,6 +235,6 @@ func bot_think(bot: Node, _delta: float) -> void:
 			continue
 		var ahead := wrapf(my_angle - _bar_angle(i), -PI, PI)   # バーが自分に届くまでの角度
 		var speed := START_SPEED + SPEED_UP * _elapsed
-		if ahead > 0.0 and ahead / speed < reaction and randf() < 0.9:
+		if ahead > 0.0 and ahead / speed < reaction and randf() < Net.cpu_value(0.55, 0.85, 0.98):
 			bot.ai_jump = true
 	bot.ai_dash = false

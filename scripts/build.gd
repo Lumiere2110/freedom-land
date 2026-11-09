@@ -115,6 +115,13 @@ static func environment(parent: Node, top: Color, horizon: Color, ground: Color,
 	env.fog_enabled = true                             # 遠くをかすませる
 	env.fog_light_color = horizon
 	env.fog_density = 0.004
+	# ブラウザ版(スマホ)の軽い描き方では、霧と光のにじみで白っぽくなりすぎるので切る
+	if RenderingServer.get_current_rendering_method() == "gl_compatibility":
+		env.fog_enabled = false
+		env.glow_enabled = false
+		env.ssao_enabled = false
+		env.ambient_light_energy = 0.45
+		sun_energy *= 0.7
 
 	var we := WorldEnvironment.new()
 	we.environment = env

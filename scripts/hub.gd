@@ -218,6 +218,10 @@ func _build_hub_ui() -> void:
 	_player_list = VBoxContainer.new()
 	box.add_child(_player_list)
 
+	# CPUのつよさはホスト(CPUを動かす人)だけが選べる
+	if multiplayer.is_server():
+		box.add_child(main.cpu_level_row())
+
 	var leave := Button.new()
 	leave.text = "タイトルに戻る"
 	leave.focus_mode = Control.FOCUS_NONE

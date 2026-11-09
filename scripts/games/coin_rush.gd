@@ -176,7 +176,7 @@ func bot_think(bot: Node, _delta: float) -> void:
 	# たまに近くの相手にダッシュでぶつかりに行く
 	bot.ai_dash = false
 	for o in players.values():
-		if o != bot and not o.out and o.global_position.distance_to(bot.global_position) < 2.5 and randf() < 0.02:
+		if o != bot and not o.out and o.global_position.distance_to(bot.global_position) < 2.5 and randf() < Net.cpu_value(0.005, 0.02, 0.04):
 			var d2: Vector3 = o.global_position - bot.global_position
 			bot.ai_move = Vector2(d2.x, d2.z).normalized()
 			bot.ai_dash = true

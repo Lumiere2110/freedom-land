@@ -205,14 +205,14 @@ func _countdown() -> void:
 	timer_label.text = str(int(game_time))
 	for n in [3, 2, 1]:
 		show_big(str(n))
-		await get_tree().create_timer(0.9).timeout
+		await get_tree().create_timer(0.9, false).timeout
 		if not is_inside_tree():
 			return
 	show_big("スタート!", Color("#ffd166"))
 	state = "play"
 	_set_all_can_move(true)
 	on_start()
-	await get_tree().create_timer(0.8).timeout
+	await get_tree().create_timer(0.8, false).timeout
 	if is_inside_tree() and big_label.text == "スタート!":
 		show_big("")
 
@@ -288,7 +288,7 @@ func show_results(final_scores: Dictionary, header: String) -> void:
 		tw.tween_property(winner, "scale", Vector3.ONE, 0.25)
 
 	if multiplayer.is_server():
-		await get_tree().create_timer(7.0).timeout
+		await get_tree().create_timer(7.0, false).timeout
 		if is_inside_tree():
 			main.back_to_hub()
 

@@ -149,7 +149,8 @@ func _move_myself(delta: float) -> void:
 	var want_dash := false
 	if can_move:
 		if is_bot:
-			input = ai_move.limit_length(1.0)
+			# CPUの強さで歩く速さを変える(よわい 70% / ふつう 88% / つよい 100%)
+			input = ai_move.limit_length(1.0) * Net.cpu_value(0.7, 0.88, 1.0)
 			want_jump = ai_jump
 			want_dash = ai_dash
 		else:

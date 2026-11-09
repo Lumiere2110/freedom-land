@@ -41,15 +41,35 @@ var my_name := "プレイヤー"
 ## オンライン中なら true、ひとりで遊んでいるなら false
 var online := false
 
-## 日本語を表示するためのフォント。Windows に入っているフォントを使います。
-var font: SystemFont
+## CPUの強さ。0 = よわい、1 = ふつう、2 = つよい(CPUを動かすホストの設定が使われます)
+var cpu_level := 1
+const CPU_LEVEL_NAMES := ["よわい", "ふつう", "つよい"]
+## CPUの強さが変わったときの合図(ボタンの表示を合わせるため)
+signal cpu_level_changed
+
+
+## CPUの強さを変える
+func set_cpu_level(level: int) -> void:
+	cpu_level = clampi(level, 0, 2)
+	cpu_level_changed.emit()
+
+## 日本語を表示するためのフォント。
+## ブラウザ版(スマホ)にはパソコンのフォントがないので、フォントファイルをゲームに入れています。
+## M PLUS Rounded 1c(SIL Open Font License。fonts/OFL.txt を見てください)
+var font: Font = preload("res://fonts/MPLUSRounded1c-Bold.ttf")
+
+
+## ブラウザ版(スマホなど)で動いているなら true
+func is_web() -> bool:
+	return OS.has_feature("web")
+
+
+## CPUの強さに合わせた値を返す。例: cpu_value(0.5, 0.8, 1.0)
+func cpu_value(weak: float, normal: float, strong: float) -> float:
+	return [weak, normal, strong][clampi(cpu_level, 0, 2)]
 
 
 func _ready() -> void:
-	# 日本語フォントの準備。上から順に探して、見つかったものを使います。
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Yu Gothic UI", "Meiryo UI", "Meiryo", "Noto Sans CJK JP", "Noto Sans JP"])
-	font.font_weight = 700
 	# すべての文字(ボタン・ラベル)の標準フォントにする
 	ThemeDB.fallback_font = font
 	ThemeDB.fallback_font_size = 22

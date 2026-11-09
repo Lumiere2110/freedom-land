@@ -46,6 +46,8 @@ var _title_ui: Control
 var _message_label: Label
 var _pages := {}               # タイトル画面のページ: "top"(はじめ) / "play"(ゲーム一覧) / "online"(接続)
 var _name_edit: LineEdit
+var pause_menu: CanvasLayer    # ポーズメニュー(scripts/pause_menu.gd)
+var touch: Control             # スマホ用の画面ボタン(scripts/touch_controls.gd)
 
 
 func _ready() -> void:
@@ -54,6 +56,18 @@ func _ready() -> void:
 	Net.connection_problem.connect(_on_connection_problem)
 	Net.players_changed.connect(_on_players_changed)
 	_show_title()
+
+	# ポーズメニュー
+	pause_menu = preload("res://scripts/pause_menu.gd").new()
+	pause_menu.main = self
+	add_child(pause_menu)
+	# スマホ用の画面ボタン(タッチ画面のときだけ表示される)
+	var touch_layer := CanvasLayer.new()
+	touch_layer.layer = 15
+	add_child(touch_layer)
+	touch = preload("res://scripts/touch_controls.gd").new()
+	touch.main = self
+	touch_layer.add_child(touch)
 
 	# テスト用: コマンドラインで起動したときの自動テスト(ふつうに遊ぶときは使わない)
 	var args := OS.get_cmdline_user_args()
@@ -81,6 +95,7 @@ func _setup_input() -> void:
 	_add_action("dash", [KEY_SHIFT, KEY_K], [JOY_BUTTON_X], [])
 	_add_action("cam_left", [KEY_Q], [JOY_BUTTON_LEFT_SHOULDER], [])
 	_add_action("cam_right", [KEY_E], [JOY_BUTTON_RIGHT_SHOULDER], [])
+	_add_action("pause", [KEY_ESCAPE, KEY_P], [JOY_BUTTON_START], [])
 
 
 func _add_action(action: String, keys: Array, buttons: Array, axis: Array) -> void:
@@ -107,6 +122,9 @@ func _add_action(action: String, keys: Array, buttons: Array, axis: Array) -> vo
 ## 画面を読み込む。ホストが .rpc() で呼ぶと、全員のパソコンで同じ画面になる
 @rpc("authority", "call_local", "reliable")
 func load_scene(scene_name: String, participants: Array) -> void:
+	get_tree().paused = false   # 画面を切りかえるときは、ポーズを必ず解除する
+	if pause_menu:
+		pause_menu.visible = false
 	var old := get_node_or_null("Game")
 	if old:
 		remove_child(old)   # すぐに外して、新しい「Game」と名前がぶつからないようにする
@@ -240,7 +258,9 @@ func _show_title() -> void:
 	box.add_child(_message_label)
 
 	var keys := Label.new()
-	keys.text = "移動 WASD/矢印  ジャンプ Space  ダッシュ Shift  カメラ Q/E  (コントローラーも使えます)"
+	keys.text = "移動 WASD/矢印  ジャンプ Space  ダッシュ Shift  カメラ Q/E  ポーズ Esc/P  (コントローラーも使えます)"
+	if touch_screen():
+		keys.text = "画面の左側をさわって移動 ・ 右側をなぞってカメラ ・ 右下のボタンでジャンプ/ダッシュ"
 	keys.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	keys.add_theme_font_size_override("font_size", 16)
 	keys.add_theme_color_override("font_color", Color(1, 1, 1, 0.75))
@@ -298,7 +318,12 @@ func _build_top_page() -> Control:
 	var online := _big_button("オンライン", Color("#4cc9f0"))
 	online.custom_minimum_size.y = 68
 	online.add_theme_font_size_override("font_size", 32)
-	online.pressed.connect(func(): _show_page("online"))
+	online.pressed.connect(func():
+		if Net.is_web():
+			# ブラウザ版では、パソコンどうしをつなぐ通信(ENet)が使えない
+			_set_message("ブラウザ版ではオンライン対戦はできません。\nみんなで遊ぶときはパソコン版(my web からダウンロード)を使ってね。")
+		else:
+			_show_page("online"))
 	page.add_child(online)
 	return page
 
@@ -322,6 +347,11 @@ func _build_play_page() -> Control:
 	page.add_child(grid)
 	for g in GAMES:
 		grid.add_child(_game_card(g))
+
+	# CPUのつよさを選ぶ列
+	var level_row := cpu_level_row()
+	level_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	page.add_child(level_row)
 
 	var back := _big_button("もどる", Color("#c7c9d9"))
 	back.custom_minimum_size = Vector2(220, 48)
@@ -359,6 +389,46 @@ func _game_card(g: Dictionary) -> Button:
 	inner.add_child(text)
 	b.pressed.connect(func(): _start_solo_game(g["id"]))
 	return b
+
+
+## 「CPUのつよさ: よわい / ふつう / つよい」の列を作る(タイトルと広場で使う)
+func cpu_level_row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var label := Label.new()
+	label.text = "CPUのつよさ"
+	label.add_theme_font_size_override("font_size", 20)
+	row.add_child(label)
+	var level_colors := [Color("#8fd694"), Color("#ffd166"), Color("#ff7b7b")]
+	var buttons := []
+	for i in Net.CPU_LEVEL_NAMES.size():
+		var b := _big_button(Net.CPU_LEVEL_NAMES[i], level_colors[i])
+		b.custom_minimum_size = Vector2(110, 44)
+		b.add_theme_font_size_override("font_size", 20)
+		b.toggle_mode = true
+		b.button_pressed = Net.cpu_level == i
+		# 選ばれているボタンは白いふちで目立たせる
+		var on: StyleBoxFlat = b.get_theme_stylebox("focus").duplicate()
+		b.add_theme_stylebox_override("pressed", on)
+		buttons.append(b)
+		row.add_child(b)
+	for i in buttons.size():
+		buttons[i].pressed.connect(func(): Net.set_cpu_level(i))
+	# 1つだけ押されている状態にする(タイトルと広場、両方の列を合わせる)
+	var refresh := func():
+		for j in buttons.size():
+			if is_instance_valid(buttons[j]):
+				buttons[j].set_pressed_no_signal(Net.cpu_level == j)
+	Net.cpu_level_changed.connect(refresh)
+	row.tree_exiting.connect(func():
+		if Net.cpu_level_changed.is_connected(refresh):
+			Net.cpu_level_changed.disconnect(refresh))
+	return row
+
+
+## タッチ画面(スマホ・タブレット)か
+func touch_screen() -> bool:
+	return DisplayServer.is_touchscreen_available() or OS.get_cmdline_user_args().has("--touch")
 
 
 ## ひとりでゲームを始める(足りない人数はCPU)

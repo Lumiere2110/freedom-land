@@ -26,3 +26,17 @@ window/stretch/aspect="expand"
 [rendering]
 
 anti_aliasing/quality/msaa_3d=2
+; ブラウザ版(スマホ)では、軽くて対応している機種が多い「Compatibility」で描く
+renderer/rendering_method.web="gl_compatibility"
+anti_aliasing/quality/msaa_3d.web=0
+textures/vram_compression/import_etc2_astc=true
+
+[input_devices]
+
+; スマホでは、画面のタッチをマウスのクリックとしても扱う(ボタンを押せるように)
+pointing/emulate_mouse_from_touch=true
+
+[gui]
+
+; ボタンや文字に使うフォント(日本語入り)。ブラウザ版にはパソコンのフォントがないので必須
+theme/custom_font="res://fonts/MPLUSRounded1c-Bold.ttf"

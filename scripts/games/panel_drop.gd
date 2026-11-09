@@ -113,7 +113,7 @@ func drop_panel(idx: int) -> void:
 	mat.albedo_color = Color("#ffd166")
 	mat.emission_enabled = true
 	mat.emission = Color("#ff9f1c")
-	await get_tree().create_timer(SHAKE_TIME).timeout
+	await get_tree().create_timer(SHAKE_TIME, false).timeout
 	if not is_inside_tree():
 		return
 	p["state"] = 2
@@ -206,5 +206,5 @@ func bot_think(bot: Node, _delta: float) -> void:
 	var ahead: Vector3 = bot.global_position + Vector3(bot.ai_move.x, 0, bot.ai_move.y) * 1.6
 	ahead.y = LAYER_Y[layer]
 	var a_idx := _panel_index_at(ahead)
-	bot.ai_jump = a_idx >= 0 and _panels[a_idx]["state"] == 2 and randf() < 0.5
+	bot.ai_jump = a_idx >= 0 and _panels[a_idx]["state"] == 2 and randf() < Net.cpu_value(0.2, 0.5, 0.9)
 	bot.ai_dash = false

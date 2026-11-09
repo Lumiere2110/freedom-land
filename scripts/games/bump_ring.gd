@@ -109,7 +109,7 @@ func mark_out(k: String) -> void:
 		var p: Node = players[k]
 		p.can_move = false
 		show_big("%s 脱落!" % p.display_name, p.color.lightened(0.3))
-		get_tree().create_timer(1.0).timeout.connect(func():
+		get_tree().create_timer(1.0, false).timeout.connect(func():
 			if not is_inside_tree():
 				return
 			p.set_out(true)   # 落ちていくところを見せてから消す
@@ -162,7 +162,7 @@ func score_text(value: int) -> String:
 func bot_think(bot: Node, _delta: float) -> void:
 	var pos: Vector3 = bot.global_position
 	var flat := Vector2(pos.x, pos.z)
-	if flat.length() > _radius - 2.0:
+	if flat.length() > _radius - Net.cpu_value(1.0, 2.0, 2.5):   # つよいCPUほど、ふちに近づかない
 		bot.ai_move = -flat.normalized()
 		bot.ai_dash = false
 		return
@@ -183,4 +183,4 @@ func bot_think(bot: Node, _delta: float) -> void:
 	var aim := Vector2(tp.x, tp.z) * 0.85
 	var to := aim - flat
 	bot.ai_move = to.normalized()
-	bot.ai_dash = best < 3.2 and randf() < 0.08
+	bot.ai_dash = best < 3.2 and randf() < Net.cpu_value(0.02, 0.06, 0.12)
