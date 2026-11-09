@@ -23,7 +23,12 @@
 | ダッシュ(体当たり) | Shift / K | X |
 | カメラを回す | Q / E | LB / RB |
 
-## 遊び方
+## ダウンロード
+
+**[最新版をダウンロード(Releases)](https://github.com/Lumiere2110/freedom-land/releases/latest)** から `FreedomLand.exe` をダウンロードして、ダブルクリックすると遊べます(インストール不要)。
+Windows に「PC を保護しました」と出たときは、「詳細情報」→「実行」を押してください。
+
+## 遊び方(ソースコードから動かす)
 
 1. [Godot 4.7](https://godotengine.org/download/) を起動して「インポート」からこのフォルダの `project.godot` を開く
 2. 右上の ▶(F5)を押すと始まる
